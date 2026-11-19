@@ -1,0 +1,1 @@
+{"description":"NIVA QUANT AI frontend — static, no build step. The type field exists so node --check validates the ES modules correctly.","private":true,"type":"module"}

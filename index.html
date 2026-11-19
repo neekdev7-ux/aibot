@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIVA QUANT AI — Institutional Crypto Scanner</title>
+<meta name="description" content="NIVA QUANT AI: Binance USDT-M Futures scanner with structure, order flow, footprint and liquidity analysis. Paper trading by default. Real public data only.">
+<link rel="stylesheet" href="styles.css">
+<!-- TradingView Lightweight Charts (CDN). If it fails to load, charts fall back to a built-in canvas renderer. -->
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">NQ</span>
+    <span class="brand-name">NIVA QUANT AI</span>
+    <span class="brand-sub">USDT-M Futures · Paper trading</span>
+  </div>
+  <div class="topbar-right">
+    <span id="staleNote" class="stale-note" hidden></span>
+    <span id="wsStatusBadge" class="ws-badge">WS: connecting…</span>
+    <span id="clock" class="clock">–</span>
+  </div>
+</header>
+
+<nav class="sidenav" id="sidenav">
+  <button class="nav-item active" data-section="overview">Overview</button>
+  <button class="nav-item" data-section="scanner">Live Scanner</button>
+  <button class="nav-item" data-section="signals">AI Signals <span class="nav-badge" id="badgeSignals" hidden></span></button>
+  <button class="nav-item" data-section="orderflow">Order Flow</button>
+  <button class="nav-item" data-section="footprint">Footprint</button>
+  <button class="nav-item" data-section="liquidity">Liquidity Map</button>
+  <button class="nav-item" data-section="coin">Coin Analysis</button>
+  <button class="nav-item" data-section="trades">Active Trades <span class="nav-badge" id="badgeTrades" hidden></span></button>
+  <button class="nav-item" data-section="history">Trade History</button>
+  <button class="nav-item" data-section="backtest">Backtesting</button>
+  <button class="nav-item" data-section="analytics">Analytics</button>
+  <button class="nav-item" data-section="settings">Settings</button>
+  <div class="nav-foot">
+    <p>Real Binance public data only. No API key. No simulated prices, signals or histories.</p>
+    <p>The confluence score is <b>not</b> a win probability.</p>
+    <p>70% win rate is an unvalidated research target, not a claim.</p>
+  </div>
+</nav>
+
+<main class="content">
+  <h1 id="pageTitle" class="page-title">Overview</h1>
+
+  <!-- OVERVIEW -->
+  <section id="sec-overview" class="section">
+    <div id="overviewKpis" class="kpi-grid"></div>
+    <div class="two-col">
+      <div class="panel">
+        <h3>Top scanned pairs</h3>
+        <div id="overviewTop"></div>
+      </div>
+      <div class="panel">
+        <h3>Latest active signals</h3>
+        <div id="overviewSignals"></div>
+        <p class="hint">Click any coin to open its full analysis. Signals are paper-trading ideas only — real trading is not implemented.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIVE SCANNER -->
+  <section id="sec-scanner" class="section" hidden>
+    <div class="toolbar">
+      <button id="scanBtn" class="btn primary">Run scan</button>
+      <label>Sort
+        <select id="scanSort">
+          <option value="score">Score</option>
+          <option value="volume">Volume 24h</option>
+          <option value="volatility">Volatility (ATR%)</option>
+          <option value="activity">Activity (rel. volume)</option>
+          <option value="change">24h change</option>
+        </select>
+      </label>
+      <span id="scanMeta" class="hint"></span>
+    </div>
+    <div id="scanProgress" class="progress" hidden>
+      <div class="progress-bar"><div id="scanFill" class="progress-fill"></div></div>
+      <span id="scanLabel" class="hint"></span>
+    </div>
+    <div id="scannerTable"></div>
+    <div id="scanExcluded" class="hint" style="margin-top:10px"></div>
+    <p class="hint">Two-pass scan: fast technicals first, then orderflow + higher-timeframe enrichment for candidates only. Pegged/stable pairs are excluded before scoring (name list + &lt;0.2% 24h range guard).</p>
+  </section>
+
+  <!-- AI SIGNALS -->
+  <section id="sec-signals" class="section" hidden>
+    <p class="hint">A signal needs every gate: HTF bias, structure, liquidity sweep, order flow, footprint, VWAP and volume — plus a computable SL/TP at min 1:2 R:R. Signals expire automatically. The score is confluence, not a win probability.</p>
+    <div id="signalsTable"></div>
+  </section>
+
+  <!-- ORDER FLOW -->
+  <section id="sec-orderflow" class="section" hidden>
+    <p class="hint">From real executed aggTrades: aggressive buy/sell volume, delta, CVD slope and large trades. Book imbalance comes from the live order book snapshot.</p>
+    <div id="orderflowTable"></div>
+  </section>
+
+  <!-- FOOTPRINT -->
+  <section id="sec-footprint" class="section" hidden>
+    <div class="toolbar">
+      <button id="fpReload" class="btn">Reload footprint</button>
+      <span class="hint">Price levels, bid/ask traded volume, delta, imbalance highlight. Traded volume only — not resting liquidity.</span>
+    </div>
+    <div id="footprintContent"></div>
+  </section>
+
+  <!-- LIQUIDITY MAP -->
+  <section id="sec-liquidity" class="section" hidden>
+    <div class="toolbar">
+      <button id="liqReload" class="btn">Reload</button>
+      <span class="hint">Structure-derived liquidity pools (stop clusters above/below price), resting book walls and sweep history.</span>
+    </div>
+    <div id="liquidityContent"></div>
+  </section>
+
+  <!-- COIN ANALYSIS -->
+  <section id="sec-coin" class="section" hidden>
+    <div class="toolbar">
+      <h2 id="coinTitle" style="margin:0">Coin Analysis</h2>
+      <span class="tf-tabs">
+        <button data-coin-tf="5m">5m</button>
+        <button data-coin-tf="15m" class="active">15m</button>
+        <button data-coin-tf="1h">1h</button>
+        <button data-coin-tf="4h">4h</button>
+      </span>
+    </div>
+    <div id="coinChart" class="chart-box"></div>
+    <div class="two-col">
+      <div class="panel"><h4>Volume profile (traded volume by price)</h4>
+        <canvas id="volumeProfile" width="520" height="240" style="width:100%"></canvas>
+      </div>
+      <div class="panel"><h4>Confluence score — both directions</h4><div id="coinScore"></div></div>
+    </div>
+    <div id="coinContent" style="margin-top:14px"></div>
+  </section>
+
+  <!-- ACTIVE TRADES -->
+  <section id="sec-trades" class="section" hidden>
+    <p class="hint">Paper trades only. Entry/SL/TP lock at creation and never move. TP1 closes 50%; the rest runs to TP2. On a tick that touches both TP and SL, the SL is assumed hit first (conservative). Trades auto-close on live price.</p>
+    <div id="activeTradesTable"></div>
+  </section>
+
+  <!-- TRADE HISTORY -->
+  <section id="sec-history" class="section" hidden>
+    <div id="historyTable"></div>
+  </section>
+
+  <!-- BACKTESTING -->
+  <section id="sec-backtest" class="section" hidden>
+    <div class="toolbar">
+      <label>Coins (comma-separated) <input id="btCoins" type="text" value="BTCUSDT,ETHUSDT,SOLUSDT" size="40"></label>
+      <label>Timeframe
+        <select id="btTf">
+          <option value="5m">5m</option>
+          <option value="15m" selected>15m</option>
+          <option value="1h">1h</option>
+          <option value="4h">4h</option>
+        </select>
+      </label>
+      <button id="btRun" class="btn primary">Run backtest</button>
+    </div>
+    <div id="btProgress" class="progress" hidden>
+      <div class="progress-bar"><div id="btFill" class="progress-fill"></div></div>
+      <span id="btLabel" class="hint"></span>
+    </div>
+    <div id="backtestResults"></div>
+  </section>
+
+  <!-- ANALYTICS -->
+  <section id="sec-analytics" class="section" hidden>
+    <div class="panel"><h4>Simulated equity curve (closed paper trades only)</h4>
+      <canvas id="equityCanvas" width="900" height="180" style="width:100%"></canvas>
+    </div>
+    <div id="analyticsContent" style="margin-top:14px"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="sec-settings" class="section" hidden>
+    <div class="two-col">
+      <div class="panel">
+        <h3>Market &amp; timeframes</h3>
+        <div class="form-grid">
+          <label>Market <input type="text" value="Binance USDT-M Futures" disabled></label>
+          <label>Bias TF <input id="set_biasTf" type="text" value="4h"></label>
+          <label>Bias TF 2 <input id="set_biasTf2" type="text" value="1h"></label>
+          <label>Setup TF <input id="set_setupTf" type="text" value="15m"></label>
+          <label>Entry TF <input id="set_entryTf" type="text" value="5m"></label>
+        </div>
+        <h3>Filters</h3>
+        <div class="form-grid">
+          <label>Min score <input id="set_minScore" type="number" min="0" max="100"></label>
+          <label>Watchlist score <input id="set_watchlistScore" type="number" min="0" max="100"></label>
+          <label>Min 24h volume $ <input id="set_minVolume24h" type="number" min="0" step="100000"></label>
+          <label>Min liquidity $ <input id="set_minLiquidityUsd" type="number" min="0" step="1000"></label>
+          <label>Max spread % <input id="set_maxSpreadPct" type="number" min="0" step="0.01"></label>
+          <label>Min ATR % <input id="set_minAtrPct" type="number" min="0" step="0.01"></label>
+          <label>Max ATR % <input id="set_maxAtrPct" type="number" min="0" step="0.1"></label>
+          <label>Min R:R <input id="set_minRR" type="number" min="1" step="0.5"></label>
+        </div>
+        <h3>Thresholds</h3>
+        <div class="form-grid">
+          <label>ATR SL buffer (× ATR) <input id="set_atrSlBuffer" type="number" min="0" step="0.05"></label>
+          <label>ATR SL fallback (× ATR) <input id="set_atrSlMultiplier" type="number" min="0" step="0.1"></label>
+          <label>VWAP lookback (candles) <input id="set_vwapLookback" type="number" min="5"></label>
+          <label>CVD lookback (trades) <input id="set_cvdLookback" type="number" min="10"></label>
+          <label>Footprint imbalance % <input id="set_footprintImbalance" type="number" min="100" step="50"></label>
+          <label>Large trade $ <input id="set_largeTradeUsd" type="number" min="0" step="1000"></label>
+          <label>Cooldown (min) <input id="set_cooldownMin" type="number" min="0"></label>
+          <label>Signal expiry (min) <input id="set_signalExpiryMin" type="number" min="1"></label>
+        </div>
+        <h3>Scanner &amp; paper trading</h3>
+        <div class="form-grid">
+          <label>Scan interval (min) <input id="set_scanIntervalMin" type="number" min="1"></label>
+          <label>Scan limit (pairs) <input id="set_scanLimit" type="number" min="5" max="200"></label>
+          <label>Fee % / side <input id="set_feePct" type="number" min="0" step="0.01"></label>
+          <label>Slippage % <input id="set_slippagePct" type="number" min="0" step="0.01"></label>
+          <label>Paper capital $ <input id="set_paperCapital" type="number" min="0" step="100"></label>
+          <label>Risk / trade % <input id="set_riskPerTradePct" type="number" min="0" step="0.1"></label>
+        </div>
+        <div class="check-row">
+          <label><input id="set_paperTrading" type="checkbox"> Paper trading ON <span class="hint">(default — real trading is NOT implemented)</span></label>
+          <label><input id="set_scannerOn" type="checkbox"> Scanner auto-run</label>
+          <label><input id="set_fundingSim" type="checkbox"> Simulate funding in backtest</label>
+        </div>
+        <div class="toolbar" style="margin-top:14px">
+          <button id="saveSettings" class="btn primary">Save settings</button>
+          <button id="resetSettings" class="btn">Reset to defaults</button>
+          <button id="exportData" class="btn">Export data (JSON)</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>System health</h3>
+        <div id="systemHealth"></div>
+        <h3 style="margin-top:18px">Event log</h3>
+        <div class="toolbar"><button id="clearLogs" class="btn small">Clear log</button></div>
+        <div id="eventLogs" class="log-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>NIVA QUANT AI — paper trading by default. Real trading is not implemented. All market data is live public data from Binance; all performance figures come from real stored paper trades on this device, or show as empty when there are none. Signals are not financial advice.</p>
+  </footer>
+</main>
+
+<div id="toasts" class="toasts"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
